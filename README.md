@@ -1,8 +1,8 @@
-# Laboratorio de red corporativa: VLSM, Dual-Stack y seguridad L2 (Cisco CCNA, ITN)
+# Red corporativa Cisco: evolución de CCNA ITN a una arquitectura VLAN y Router-on-a-Stick
 
-Armé en Cisco Packet Tracer una red de oficina chica: un router ISR 4331, dos switches Catalyst 2960-24TT, cuatro PCs y un servidor interno. La dividí en tres sectores (Administración, Soporte y Data Center/Intranet) y le fui sumando subnetting con VLSM, DHCP para IPv4, SLAAC para IPv6, acceso remoto por SSH v2 y seguridad de puertos en Capa 2.
+Proyecto de red corporativa desarrollado en Cisco Packet Tracer con un router ISR 4331, dos switches Catalyst 2960-24TT, cuatro PCs y un servidor interno. El laboratorio conserva una primera versión (v1, nivel CCNA ITN) y documenta su evolución a una segunda arquitectura (v2, contenidos de CCNA SRWE): segmentación mediante VLAN, enlaces trunk 802.1Q, Router-on-a-Stick, red dedicada de gestión y conectividad Dual-Stack.
 
-Es el segundo proyecto que subo, después del [laboratorio de Mini ISP con MikroTik](https://github.com/idersalto3/mikrotik-mini-isp-lab). Lo fui armando mientras me preparo para el examen de CCNA 1 (ITN) y para el MTCNA.
+Es el segundo proyecto que subo, después del [laboratorio de Mini ISP con MikroTik](https://github.com/idersalto3/mikrotik-mini-isp-lab). Lo desarrollé para llevar a la práctica los fundamentos de redes y seguir ampliándolo a medida que avanzo con Cisco Networking Academy.
 
 ## Por qué lo armé
 
@@ -10,7 +10,146 @@ Soy técnico en redes y, mientras repasaba los 17 módulos de CCNA 1, me di cuen
 
 Armé esta topología para juntar en un solo escenario casi todo lo que vi en ITN y ver cómo se relacionan las capas de punta a punta: desde el cableado y el bloqueo de una MAC intrusa en un puerto, hasta el ruteo entre subredes de distinto tamaño y que una PC abra un sitio interno por nombre.
 
-## Qué cubre y qué dejé afuera (y por qué)
+
+
+---
+
+## Evolución v2 — Refactorización a arquitectura empresarial (CCNA SRWE)
+
+<kbd>v1 · CCNA ITN</kbd> → <kbd>v2 · CCNA SRWE</kbd>
+
+La versión 2 transforma la topología inicial, que conectaba cada sector a una interfaz física distinta del router, en una arquitectura lógica segmentada. Se implementó **Router-on-a-Stick** sobre un único enlace físico entre R1 y SW-Access-01, cuatro VLAN y trunks 802.1Q entre los equipos de infraestructura.
+
+> [!IMPORTANT]
+> La v1 se conserva como punto de partida y continúa documentada más abajo. La v2 es una evolución del mismo laboratorio, no un reemplazo de la versión original. Las credenciales y direcciones utilizadas pertenecen exclusivamente a Packet Tracer.
+
+### Resumen del cambio v1 → v2
+
+| Aspecto | v1 · Base ITN | v2 · Arquitectura SRWE |
+|---|---|---|
+| Enlace router-switch | Tres enlaces físicos, uno por sector | Un enlace trunk por `R1 G0/0/0`, con cuatro subinterfaces |
+| Segmentación | Sectores separados por enlaces físicos y puertos en VLAN 1 | VLAN 10, 20, 30 y 99 |
+| Interconexión de switches | Sin trunk inter-switch en la versión final v1 | Trunk 802.1Q entre `SW-Access-01` y `SW-Access-02` |
+| Gestión | SVIs sobre VLAN 1 | VLAN 99 dedicada, VLAN 1 apagada |
+| Routing | Una interfaz física por subred | Router-on-a-Stick y routing inter-VLAN |
+| Servicios | DHCPv4, SLAAC IPv6, DNS y HTTP | Servicios conservados y adaptados a la nueva segmentación |
+
+### Topología lógica v2
+
+![Topología lógica v2: Router-on-a-Stick, cuatro VLAN y trunks 802.1Q](docs/img/05-topologia-v2.png)
+
+Archivo de simulación: [`red-corporativa-v2.pkt`](packet-tracer/red-corporativa-v2.pkt).
+
+### Matriz de direccionamiento v2
+
+| VLAN | Nombre | Subred IPv4 | Máscara | Prefijo IPv6 | Gateway en R1 | Dispositivos / direcciones |
+|---:|---|---|---|---|---|---|
+| 10 | `ADMIN` | `192.168.1.0/25` | `255.255.255.128` | `2001:db8:acad:10::/64` | `192.168.1.1` / `2001:db8:acad:10::1` | PC-Admin-1 y PC-ADMIN-2 por DHCPv4 y SLAAC |
+| 20 | `SOPORTE` | `192.168.1.128/26` | `255.255.255.192` | `2001:db8:acad:20::/64` | `192.168.1.129` / `2001:db8:acad:20::1` | PC-Soporte-1 y PC-Soporte-2 por DHCPv4 y SLAAC |
+| 30 | `SERVIDORES` | `192.168.1.192/27` | `255.255.255.224` | `2001:db8:acad:30::/64` | `192.168.1.193` / `2001:db8:acad:30::1` | ServerEmpresa: `192.168.1.194`, DNS y HTTP |
+| 99 | `GESTION` | `192.168.1.224/28` | `255.255.255.240` | `2001:db8:acad:99::/64` | `192.168.1.225` / `2001:db8:acad:99::1` | SW-Access-01: `192.168.1.226`; SW-Access-02: `192.168.1.227` |
+
+Las subinterfaces de R1 utilizan `fe80::1` como dirección IPv6 link-local. Los dos switches utilizan `192.168.1.225` como gateway de gestión. Sus SVI de VLAN 1 quedaron en `shutdown`.
+
+### Mapeo de puertos v2
+
+| Equipo / puerto | Conectado a | Modo / VLAN | Función |
+|---|---|---|---|
+| R1 `G0/0/0` | SW-Access-01 `Gi0/2` | Trunk 802.1Q | Router-on-a-Stick: VLAN 10, 20, 30 y 99 |
+| SW-Access-01 `Gi0/1` | SW-Access-02 `Gi0/1` | Trunk 802.1Q | Transporte de VLAN entre switches |
+| SW-Access-01 `Fa0/1–Fa0/2` | PCs de Administración | Access VLAN 10 | Puestos de Administración |
+| SW-Access-01 `Fa0/24` | ServerEmpresa `Fa0` | Access VLAN 30 | Servicios DNS y HTTP |
+| SW-Access-02 `Fa0/1–Fa0/2` | PCs de Soporte | Access VLAN 20 | Puestos de Soporte |
+
+Los trunks se configuraron manualmente en ambos extremos, con la lista permitida `10,20,30,99` y negociación DTP deshabilitada mediante `nonegotiate`. La interfaz física `G0/0/0` de R1 transporta las cuatro redes mediante las subinterfaces `.10`, `.20`, `.30` y `.99`. Las interfaces físicas `G0/0/1` y `G0/0/2` quedaron administrativamente apagadas en la topología v2.
+
+### Qué se conservó y qué cambió
+
+- Se conservaron los pools DHCPv4 y las exclusiones existentes en R1; no fue necesario recrearlos para la migración.
+- Se mantuvieron los prefijos IPv4 de Administración, Soporte y Servidores. Se agregó el bloque `192.168.1.224/28` para gestión.
+- Se mantuvieron los prefijos IPv6 por sector y se trasladó el gateway a las subinterfaces correspondientes.
+- ServerEmpresa conserva la IP fija `192.168.1.194` y los servicios DNS/HTTP para `www.ider.com`.
+- La administración de ambos switches pasó a VLAN 99, con SSHv2 y direcciones independientes.
+
+### Verificación de la versión 2
+
+Las siguientes pruebas fueron realizadas durante la migración y quedaron registradas en el post-mortem:
+
+| Prueba | Resultado observado |
+|---|---|
+| Subinterfaces en R1 | `G0/0/0.10`, `.20`, `.30` y `.99` en `up/up` |
+| Interfaces físicas no utilizadas | `G0/0/1` y `G0/0/2` en `administratively down/down` |
+| Trunks | VLAN 10, 20, 30 y 99 en forwarding |
+| DHCPv4 en Administración y Soporte | La asignación volvió a funcionar después de corregir VLAN locales y puertos de acceso en SW-Access-02 |
+| DNS y conectividad al servidor | Desde PC-Soporte-1, `ping www.ider.com` resolvió `192.168.1.194`: 4 enviados, 4 recibidos, 0% de pérdida, menos de 1 ms y TTL=127 |
+| Gestión SSH | Desde PC-Soporte-1 se inició sesión en `192.168.1.226` y `192.168.1.227`; ambos switches mostraron su banner y prompt correspondiente |
+
+> [!NOTE]
+> La prueba `ping www.ider.com` confirma resolución DNS y conectividad IP/ICMP hasta el servidor. No se toma por sí sola como evidencia de una prueba HTTP desde el navegador. Del mismo modo, la salida de `show ipv6 interface brief` confirma las direcciones en las subinterfaces del router; conviene agregar una prueba de SLAAC y conectividad IPv6 desde una PC como evidencia de extremo a extremo.
+
+### Troubleshooting real — Post-mortem de la migración
+
+La migración no fue lineal. Estos fueron los incidentes más importantes y cómo se aislaron.
+
+#### 1. Pérdida de SSH durante el recableado
+
+- **Síntoma:** desde PC-Soporte-1, el intento de SSH a `192.168.1.2` devolvía `remote host not responding` después de unir los switches y desconectar `R1 G0/0/1`.
+- **Diagnóstico:** la comunicación de Capa 2 entre switches seguía operativa en VLAN 1. El problema estaba en Capa 3: PC-Soporte-1 necesitaba llegar a otra subred mediante su gateway `192.168.1.129`, que había quedado desconectado al retirar el enlace físico de R1.
+- **Causa raíz:** pérdida temporal del gateway de Capa 3 durante el recableado; no era inicialmente un problema de trunk.
+- **Solución y aprendizaje:** continuar la migración desde consola, es decir, con acceso out-of-band, para no depender de una sesión SSH que puede cortarse al cambiar enlaces, VLAN o SVIs.
+
+#### 2. Comando aplicado en el equipo equivocado
+
+- **Síntoma:** IOS rechazó `interface GigabitEthernet0/0/0`.
+- **Diagnóstico:** la sesión seguía abierta en un Catalyst 2960, no en el ISR 4331. En el switch los uplinks se identifican como `Gig0/1` y `Gig0/2`; la interfaz de tres niveles `Gig0/0/0` pertenece al router.
+- **Causa raíz:** contexto de CLI distinto del que se había supuesto.
+- **Solución y aprendizaje:** verificar hostname, prompt y modelo de equipo antes de ejecutar cambios. No alcanza con recordar un comando: hay que confirmar en qué dispositivo se está trabajando.
+
+#### 3. Trunk inter-switch sin operación correcta
+
+- **Síntoma:** el enlace entre SW-Access-01 y SW-Access-02 permanecía visualmente en ámbar.
+- **Diagnóstico:** `show interfaces trunk` no mostraba un trunk operativo en SW-Access-02.
+- **Causa raíz:** un extremo estaba configurado como trunk con `nonegotiate`, mientras el otro permanecía en modo access por defecto.
+- **Solución y aprendizaje:** configurar explícitamente el trunk en ambos extremos, con la misma lista de VLAN permitidas. La configuración de un enlace trunk debe coincidir en los dos switches.
+
+#### 4. Dirección IPv6 duplicada al migrar a subinterfaces
+
+- **Síntoma:** al asignar `2001:db8:acad:30::1/64` a `G0/0/0.30`, IOS informó `%IPv6-DUP_ADDR_CONFLICT`.
+- **Diagnóstico:** `show ipv6 interface brief` mostró que la dirección seguía presente en la interfaz física anterior `G0/0/2`. El intento de limpiar direcciones mediante `no ipv6 address` dentro de un `interface range` no eliminó esa configuración heredada en Packet Tracer.
+- **Causa raíz:** la misma dirección IPv6 quedó configurada en la interfaz física de la v1 y en la nueva subinterfaz.
+- **Solución y aprendizaje:** eliminar explícitamente la dirección de `G0/0/2` y asignarla a `G0/0/0.30`. Después de una migración, verificar las direcciones residuales antes de reutilizarlas.
+
+#### 5. DHCP fallaba en Soporte, pero funcionaba en Administración
+
+- **Síntoma:** PC-Admin-1 obtenía una dirección DHCP, pero PC-Soporte-1 no.
+- **Diagnóstico por eliminación:**
+  - En SW-Access-01, `show interfaces trunk` confirmó las VLAN 10, 20, 30 y 99 en forwarding.
+  - En R1, `show ip interface brief` mostró las cuatro subinterfaces en `up/up`.
+  - En SW-Access-02, `show vlan brief` reveló que las VLAN locales no estaban creadas, los puertos `Fa0/1–Fa0/2` seguían en VLAN 1 y la SVI VLAN 1 conservaba la dirección heredada `.130`.
+- **Causa raíz:** la VLAN 20 no estaba creada/asignada correctamente en el switch de acceso de Soporte. Además, la SVI de gestión vieja seguía activa en VLAN 1.
+- **Solución y aprendizaje:** crear las VLAN necesarias en SW-Access-02, asignar `Fa0/1–Fa0/2` a VLAN 20, apagar la SVI VLAN 1 y habilitar la SVI VLAN 99 con su gateway. DHCP y DNS volvieron a funcionar.
+
+#### 6. IP duplicada en VLAN 99 y caché ARP desactualizada
+
+- **Síntoma:** al probar las direcciones de gestión `.226` y `.227`, una respondía y la otra no; después de reasignar, el comportamiento se invertía.
+- **Diagnóstico:** se revisó cada CLI por separado, verificando hostname en el prompt, `show interfaces vlan 99` y `show running-config | include gateway`. En Packet Tracer, el Catalyst 2960 no admitía `show running-config interface vlan 99`, por lo que se usaron comandos alternativos.
+- **Causa raíz:** ambos switches habían quedado con la dirección `192.168.1.227` tras cruzar ventanas de consola y SSH. Además, R1 conservaba una asociación ARP anterior.
+- **Solución y aprendizaje:** asignar `192.168.1.226` a SW-Access-01 y `192.168.1.227` a SW-Access-02, mantener `192.168.1.225` como gateway en ambos y ejecutar `clear arp-cache` en R1. Después se validó SSH de forma independiente contra ambos switches.
+
+### Limitaciones conocidas de la v2
+
+- La gestión utiliza una VLAN dedicada, pero todavía no se aplicaron ACL en las líneas VTY para limitar SSH exclusivamente a hosts autorizados de VLAN 99. Por ahora, otras VLAN con conectividad enrutada pueden intentar alcanzar las IP de gestión.
+- No se documentó todavía una prueba de SLAAC y conectividad IPv6 completa desde una PC cliente de cada VLAN.
+- Falta incorporar evidencia de acceso HTTP desde el navegador en la v2, separada de la prueba de ping y resolución DNS.
+- Port Security fue implementado y probado en la v1; su cobertura y funcionamiento en todos los puertos de acceso de la v2 quedan sujetos a una nueva verificación.
+
+---
+
+## Versión 1 — Configuración inicial (CCNA ITN)
+
+La siguiente sección conserva la documentación de la topología original, que sirve como referencia para entender la evolución a v2.
+
+### Alcance de la versión 1 — Qué cubría y qué quedaba afuera
 
 Lo que sí hice:
 
@@ -24,12 +163,12 @@ Lo que sí hice:
 
 Lo que dejé afuera a propósito (por ahora):
 
-- **VLANs troncales (802.1Q) y Router-on-a-Stick:** al principio tenía los dos switches conectados entre sí con un cable cruzado, pero para quedarme en el alcance de CCNA 1 (donde cada subred sale por una interfaz física del router) conecté cada switch a una boca distinta de `R1`. Los troncales quedan para un próximo laboratorio de CCNA 2 (SRWE).
+- **VLANs troncales (802.1Q) y Router-on-a-Stick:** no formaban parte del alcance de la v1, porque el objetivo inicial era trabajar con una interfaz física de R1 por subred. Se incorporaron posteriormente en la evolución v2, documentada al comienzo de este README.
 - **DHCP Relay (`ip helper-address`):** podía poner el DHCP en el servidor, pero entonces tenía que configurar `ip helper-address` en el router, porque los routers no pasan los broadcasts de `DHCP Discover`. Preferí dejar el DHCP directamente en el router Cisco para practicar los comandos de IOS.
 - **OSPF y salida WAN (`/30`):** dejé libre el último bloque (`192.168.1.224/27`) para más adelante sumar un segundo router con enlaces punto a punto `/30`.
 - **Contraseñas fuertes:** en los switches usé claves simples (`cisco`, `Cisco123!`) a propósito. Sé que en una red real tienen que ser largas, distintas en cada equipo y bien guardadas, pero en el laboratorio entro y salgo de los equipos todo el tiempo y me comía mucho tiempo cargándolas. Lo aclaro para que no parezca una recomendación.
 
-## Topología
+### Topología de la v1
 
 ![Topología en Cisco Packet Tracer](docs/img/01-topologia-packet-tracer.png)
 
@@ -46,7 +185,7 @@ flowchart TB
     SW2 ---|"Fa0/2"| PCS2["PC-Soporte-2<br/>DHCP + SLAAC"]
 ```
 
-## Tabla de direccionamiento y VLSM
+### Direccionamiento y VLSM de la v1
 
 Arranqué con la red `192.168.1.0/24` (256 direcciones) y ordené los sectores de mayor a menor cantidad de hosts:
 
@@ -74,7 +213,7 @@ Arranqué con la red `192.168.1.0/24` (256 direcciones) y ordené los sectores d
 
 ---
 
-## Cómo lo fui armando
+### Implementación de la v1
 
 ### 1. Enrutamiento Dual-Stack y servidor DHCP en el router (R1)
 
@@ -247,7 +386,7 @@ En el segmento `/27` (`192.168.1.192/27`) conecté `ServerEmpresa` con IP fija `
 
 ---
 
-## Cómo lo verifiqué
+### Verificación de la v1
 
 **1. Tabla de enrutamiento y estado de interfaces en `R1`.** Con `show ip interface brief` y `show ip route` revisé que las tres interfaces estuvieran `up/up` y que el router reconociera los tres cortes de distinta máscara (`/25`, `/26` y `/27`) dentro de la red `192.168.1.0/24`:
 
@@ -313,7 +452,7 @@ Después probé la violación: conecté otra PC (`PC1`) en `Fa0/1` de `SW-Access
 - Probé SSH hacia los dos switches (`ssh -l admin 192.168.1.2` y `ssh -l admin 192.168.1.130`): muestran el banner de acceso restringido y piden la clave local.
 - Sumé una máquina nueva (`PC-ADMIN-2`), activé DHCP y tomó sola la `192.168.1.12` (respetando las 10 excluidas) y abrió `www.ider.com` en el navegador a la primera.
 
-## Problemas que me encontré y qué aprendí
+### Problemas y aprendizajes de la v1
 
 - **Superposición de subredes (`overlaps with GigabitEthernet0/0/0`):** cuando quise cargar `192.168.1.129 255.255.255.192` en la segunda interfaz (G0/0/1), el IOS me tiró `% 192.168.1.128 overlaps with GigabitEthernet0/0/0`. Pasaba que la primera interfaz había quedado con máscara `/24` (`255.255.255.0`), que ocupaba de la `.0` a la `.255`. Ahí entendí que para hacer VLSM primero tenés que achicar la máscara de la primera boca a `/25` (`255.255.255.128`) para liberar la otra mitad de la red.
 - **El cable cruzado entre los switches:** en la primera versión tenía `SW-Access-01` y `SW-Access-02` unidos entre sí. Cuando quise separar dos subredes me di cuenta de que, si los switches están conectados en la misma VLAN por defecto, forman un único dominio de broadcast y las subredes se mezclan. Para quedarme en el nivel de CCNA 1 saqué ese cable y conecté cada switch a su propia boca del router, y ahí entendí bien por qué cada sector lleva un Default Gateway distinto (`.1`, `.129` y `.193`).
@@ -322,19 +461,33 @@ Después probé la violación: conecté otra PC (`PC1`) en `Fa0/1` de `SW-Access
 
 ---
 
-## Próximos pasos
+## Roadmap del proyecto — v2.1 y siguientes
 
-- [ ] Agregar un segundo router (`R2`) conectado por un enlace WAN `/30` (`192.168.1.224/30`) y rutear ambas sucursales con rutas estáticas y OSPF.
-- [ ] Reemplazar los enlaces físicos separados por VLANs y enlaces troncales 802.1Q (Router-on-a-Stick).
-- [ ] Implementar listas de control de acceso (ACLs) para permitir que Soporte acceda a la Intranet pero no a las máquinas de Administración.
+### Completado en la evolución v2
+
+- [x] Migrar de tres enlaces físicos a Router-on-a-Stick mediante cuatro subinterfaces 802.1Q.
+- [x] Segmentar Administración, Soporte, Servidores y Gestión en VLAN 10, 20, 30 y 99.
+- [x] Implementar trunks 802.1Q entre R1 y SW-Access-01, y entre ambos switches.
+- [x] Trasladar la administración de los switches a VLAN 99 y apagar las SVIs heredadas de VLAN 1.
+- [x] Recuperar DHCPv4 y conectividad inter-VLAN en los sectores después de resolver las VLAN locales y los puertos de acceso.
+- [x] Validar la gestión SSH desde PC-Soporte-1 hacia ambos switches.
+
+### Próximas mejoras
+
+- [ ] **Restringir SSH mediante ACL en VTY:** permitir administración únicamente desde la red/hosts autorizados de VLAN 99 y comprobar el bloqueo desde las VLAN de usuarios.
+- [ ] **Completar seguridad de Capa 2:** revisar Port Security en puertos de acceso, evaluar DHCP Snooping si Packet Tracer lo soporta para este modelo y desactivar puertos sin uso en una VLAN de parking.
+- [ ] **Redundancia y alta disponibilidad:** agregar un segundo enlace entre switches y configurar EtherChannel con LACP; revisar el comportamiento de Rapid-PVST+.
+- [ ] **Completar pruebas Dual-Stack:** comprobar SLAAC, gateway y conectividad IPv6 desde PCs de las VLAN de usuarios.
+- [ ] **Completar evidencia de servicios:** probar el sitio `www.ider.com` por HTTP desde el navegador de una PC de Soporte y guardar la captura.
+- [ ] **Guardar evidencia de configuración:** adjuntar salidas relevantes de `show interfaces trunk`, `show vlan brief`, `show ip interface brief`, `show ipv6 interface brief` y `show spanning-tree`.
 
 ## Tecnologías y conceptos
 
-Cisco Packet Tracer, Cisco IOS, ISR 4331, Catalyst 2960-24TT, VLSM, IPv4 e IPv6 (Dual-Stack), DHCPv4, SLAAC (EUI-64), SSH v2, SVI, Port Security (sticky), DNS y HTTP.
+Cisco Packet Tracer, Cisco IOS, ISR 4331, Catalyst 2960-24TT, VLSM, IPv4 e IPv6 (Dual-Stack), VLAN 802.1Q, trunking, Router-on-a-Stick, routing inter-VLAN, DHCPv4, SLAAC (EUI-64), SSH v2, SVI de gestión, Port Security, STP, DNS y HTTP.
 
 ## Archivos del repositorio
 
-El archivo de Packet Tracer (`.pkt`) está en la carpeta `packet-tracer/`, para que lo puedas abrir y recorrer.
+Los archivos de Packet Tracer están en `packet-tracer/`: [versión original v1](packet-tracer/practicacisco.pkt) y [versión evolucionada v2](packet-tracer/red-corporativa-v2.pkt). Las capturas de ambas topologías y de las pruebas están en `docs/img/`.
 
 ## Sobre mí
 
