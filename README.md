@@ -1,4 +1,4 @@
-# Laboratorio de red corporativa en Cisco Packet Tracer: de ITN a VLAN y Router-on-a-Stick
+# Laboratorio de redes con Cisco Packet Tracer | Recorrido CCNA
 
 Este laboratorio empezó como una red de oficina chica en Cisco Packet Tracer: un router ISR 4331, dos switches Catalyst 2960-24TT, cuatro PCs y un servidor interno. Primero armé una versión con los temas de CCNA ITN. Después la fui ampliando para practicar contenidos de SRWE: VLAN, enlaces trunk 802.1Q, Router-on-a-Stick y una red separada para administrar los switches.
 
